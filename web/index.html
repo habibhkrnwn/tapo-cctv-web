@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CCTV Tapo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+    header { display: flex; gap: 8px; align-items: center; padding: 10px 16px; background: #1c1c1c; }
+    header h1 { font-size: 16px; margin: 0 auto 0 0; }
+    button { background: #2d2d2d; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+    button.active { background: #2563eb; border-color: #2563eb; }
+    #wrap { width: 100%; max-width: 1280px; margin: 16px auto; padding: 0 16px; }
+    #player { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; display: block; }
+    p { color: #999; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CCTV Tapo</h1>
+    <button data-path="cctv" class="active">HD</button>
+    <button data-path="cctv_sd">SD</button>
+    <button id="fs">Fullscreen</button>
+  </header>
+  <div id="wrap">
+    <video id="player" autoplay muted playsinline></video>
+    <p id="info">Connecting...</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+  <script>
+    // LL-HLS from MediaMTX port 8888. Not WebRTC: Firefox's WebRTC H264 decoder
+    // shows only keyframes of the Tapo Main-profile stream (~0.5 fps).
+    const host = location.hostname || 'localhost';
+    const video = document.getElementById('player');
+    const info = document.getElementById('info');
+    const buttons = document.querySelectorAll('button[data-path]');
+    let hls = null;
+    let current = 'cctv';
+    let retryTimer = null;
+    let prevFrames = 0;
+
+    function load(path) {
+      current = path;
+      clearTimeout(retryTimer);
+      if (hls) hls.destroy();
+      prevFrames = 0; // new media element source restarts the frame counter
+      const url = `http://${host}:8888/${path}/index.m3u8`;
+      buttons.forEach(b => b.classList.toggle('active', b.dataset.path === path));
+      info.textContent = 'Connecting...';
+      if (!window.Hls || !Hls.isSupported()) {
+        video.src = url; // Safari plays HLS natively.
+        return;
+      }
+      hls = new Hls({
+        lowLatencyMode: true,
+        liveSyncDuration: 0.6,
+        liveMaxLatencyDuration: 2,
+        maxLiveSyncPlaybackRate: 1.5,
+        backBufferLength: 5,
+      });
+      hls.on(Hls.Events.ERROR, (_, d) => {
+        if (!d.fatal) return;
+        info.textContent = `Stream error (${d.details}), reconnecting...`;
+        retryTimer = setTimeout(() => load(current), 2000);
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      video.play().catch(() => {});
+    }
+
+    // Report FPS and delay once per second.
+    setInterval(() => {
+      const q = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+      if (!q || !video.videoWidth) return;
+      const fps = q.totalVideoFrames - prevFrames;
+      prevFrames = q.totalVideoFrames;
+      const lat = hls && hls.latency != null ? ` · delay ${hls.latency.toFixed(1)} s` : '';
+      info.textContent = `${video.videoWidth}×${video.videoHeight} · ${fps} fps${lat}`;
+    }, 1000);
+
+    buttons.forEach(b => b.onclick = () => load(b.dataset.path));
+    document.getElementById('fs').onclick = () => video.requestFullscreen();
+    load('cctv');
+  </script>
+</body>
+</html>

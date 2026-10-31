@@ -1,0 +1,28 @@
+# MediaMTX: pull RTSP from Tapo camera, re-serve as HLS / WebRTC / RTSP.
+# start.sh renders this template into mediamtx.run.yml, replacing {{CAMERA_URL}}
+# with the camera address and account from .env. Do not put credentials here.
+logLevel: info
+
+rtsp: true
+rtspAddress: :8554
+rtmp: false
+srt: false
+
+hls: true
+hlsAddress: :8888
+
+webrtc: true
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+
+pathDefaults:
+  # TCP avoids UDP packet loss / firewall issues (common cause of VLC failure).
+  rtspTransport: tcp
+
+paths:
+  # High quality (stream1)
+  cctv:
+    source: "{{CAMERA_URL}}/stream1"
+  # Standard quality (stream2), lighter for slow networks. Always connected so HD/SD switch is instant.
+  cctv_sd:
+    source: "{{CAMERA_URL}}/stream2"
